@@ -32,6 +32,7 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
     fed_mdls_sel = list(range(n_save_instances))
 
     tst_perf_sel = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
     n_par = len(get_mdl_params([model_func()])[0])
 
     init_par_list = get_mdl_params([init_model], n_par)[0]
@@ -41,6 +42,7 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
     saved_itr = -1
     # writer object is for tensorboard visualization, comment out if not needed
     writer = SummaryWriter('%sRuns_FedAdan/%s/%s' % (data_path, data_obj.name, suffix[:]))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
 
     if not trial:
         # Check if there are past saved iterates
@@ -79,6 +81,8 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
             avg_model = model_func().to(device)
             avg_model.load_state_dict(torch.load('%sModel/%s/%s/%dcom_sel.pt'
                        %(data_path, data_obj.name, suffix, (saved_itr+1))))
+        prev_global_param = get_mdl_params([avg_model], n_par)[0]
+        prev_global_dual = np.zeros_like(prev_global_param)
         for i in range(saved_itr+1, com_amount):
             # Train if doesn't exist
             ### Fix randomness
@@ -124,6 +128,7 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
             # Scale with weights
 
             avg_model = set_client_from_params(model_func(), np.sum(clnt_params_list[selected_clnts]*weight_list[selected_clnts]/np.sum(weight_list[selected_clnts]), axis = 0))
+            current_global_param = get_mdl_params([avg_model], n_par)[0]
 
             ###
             loss_tst, acc_tst = get_acc_loss(data_obj.tst_x, data_obj.tst_y,
@@ -147,6 +152,11 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
                    }, i
                   )
 
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       current_global_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Sel clients', residual_metrics[i], i)
+            prev_global_param = current_global_param.copy()
+
             # Freeze model
             for params in avg_model.parameters():
                 params.requires_grad = False
@@ -167,6 +177,9 @@ def train_FedAdan(data_obj, act_prob, learning_rate, batch_size, epoch,
 
             if ((i+1) % save_period == 0):
                 fed_mdls_sel[i//save_period] = avg_model
+
+    save_last_window_stats(suffix, tst_perf_sel[:, 0], tst_perf_sel[:, 1], output_dir=log_dir)
+    register_method_performance(suffix, tst_perf_sel[:, 0], tst_perf_sel[:, 1], residual_metrics)
 
     return fed_mdls_sel, tst_perf_sel
 
@@ -240,4 +253,3 @@ def train_model_FedAdan(model, trn_x, trn_y, tst_x, tst_y, learning_rate, batch_
 
     return model
 #
-

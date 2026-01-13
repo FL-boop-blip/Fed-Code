@@ -104,8 +104,15 @@ def train_FedGloss(
 
     trn_perf = np.zeros((com_amount, 2))
     tst_perf = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
+    n_par = len(get_mdl_params([model_func()])[0])
+    init_par_list = get_mdl_params([init_model], n_par)[0]
+    clnt_params_list = np.ones(n_client).astype('float32').reshape(-1, 1) * init_par_list.reshape(1, -1)
 
     writer = SummaryWriter('%sRuns_FedGloss/%s/%s' % (data_path, data_obj.name, suffix))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
+    prev_global_param = get_mdl_params([server_model], n_par)[0]
+    prev_global_dual = np.zeros_like(prev_global_param)
 
     for t in range(com_amount):
         # ----- server ascent step (SAM on server) -----
@@ -186,6 +193,7 @@ def train_FedGloss(
 
             num_samples = len(trn_y)
             updates.append((num_samples, delta))
+            clnt_params_list[clnt] = get_mdl_params([local_model], n_par)[0]
 
         # ----- update server sigma -----
         if updates:
@@ -250,6 +258,11 @@ def train_FedGloss(
             {'FedGloss': tst_perf[t][1]},
             t,
         )
+        current_global_param = get_mdl_params([server_model], n_par)[0]
+        prev_global_dual = update_residual_metrics(residual_metrics, t, clnt_params_list, selected_clnts,
+                                                   current_global_param, prev_global_param, prev_global_dual)
+        log_residual_scalars(writer, 'FedGloss', residual_metrics[t], t)
+        prev_global_param = current_global_param.copy()
 
         if (not trial) and ((t + 1) % save_period == 0):
             torch.save(
@@ -270,6 +283,9 @@ def train_FedGloss(
                     )
 
             avg_models[t // save_period] = copy.deepcopy(server_model)
+
+    save_last_window_stats(suffix, tst_perf[:, 0], tst_perf[:, 1], output_dir=log_dir)
+    register_method_performance(suffix, tst_perf[:, 0], tst_perf[:, 1], residual_metrics)
 
     return avg_models, trn_perf, tst_perf
 

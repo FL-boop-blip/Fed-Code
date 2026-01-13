@@ -27,26 +27,26 @@ if __name__ == '__main__':
     n_client = 500
     # Generate IID or Dirichlet distribution
     # IID
-    data_obj = DatasetObject(dataset='CIFAR10', n_client=n_client, seed=20, rule='Dirichlet', rule_arg=0.6,
+    data_obj = DatasetObject(dataset='mnist', n_client=n_client, seed=20, rule='Dirichlet', rule_arg=0.6,
                              unbalanced_sgm=0,
                              data_path=data_path)
     # unbalanced
-    data_obj = DatasetObject(dataset='CIFAR10', n_client=n_client, seed=23, rule='iid', unbalanced_sgm=0.3, data_path=data_path)
+    # data_obj = DatasetObject(dataset='CIFAR10', n_client=n_client, seed=23, rule='iid', unbalanced_sgm=0.3, data_path=data_path)
 
     # Dirichlet (0.6)
     # data_obj = DatasetObject(dataset='CIFAR10', n_client=n_client, seed=20, unbalanced_sgm=0, rule='Drichlet', rule_arg=0.6, data_path=data_path)
     # Dirichlet (0.3)
     # data_obj = DatasetObject(dataset='CIFAR10', n_client=n_client, seed=20, unbalanced_sgm=0, rule='Drichlet', rule_arg=0.3, data_path=data_path)
 
-    model_name = 'cifar10_LeNet'  # Model type
+    model_name = 'mnist_2NN'  # Model type
     # model_name = 'Resnet18'
     # model_name_1 = 'cifar10_LeNet'
 
     ###
     # Common hyperparameters
 
-    com_amount = 1600
-    save_period = 1600
+    com_amount = 10
+    save_period = 10
     weight_decay = 1e-3
     batch_size = 50
     # act_prob = 1
@@ -90,21 +90,21 @@ if __name__ == '__main__':
                                                       suffix=suffix, trial=False,
                                                       data_path=data_path,
                                                       lr_decay_per_round=lr_decay_per_round)
-    # #
-    # print('FedSMOO')
+    #
+    print('FedSMOO')
     
-    # [avg_cld_mdls, tst_cur_cld_perf] = train_FedSMOO(data_obj=data_obj, act_prob=act_prob,
-    #                                                  learning_rate=learning_rate,
-    #                                                  batch_size=batch_size, epoch=epoch,
-    #                                                  com_amount=com_amount, print_per=print_per,
-    #                                                  weight_decay=weight_decay,
-    #                                                  model_func=model_func, init_model=init_model,
-    #                                                  alpha_coef=alpha_coef, rho=rho,
-    #                                                  sch_step=1, sch_gamma=1,
-    #                                                  save_period=save_period,
-    #                                                  suffix=suffix, trial=False,
-    #                                                  data_path=data_path,
-    #                                                  lr_decay_per_round=lr_decay_per_round)
+    [avg_cld_mdls, tst_cur_cld_perf] = train_FedSMOO(data_obj=data_obj, act_prob=act_prob,
+                                                     learning_rate=learning_rate,
+                                                     batch_size=batch_size, epoch=epoch,
+                                                     com_amount=com_amount, print_per=print_per,
+                                                     weight_decay=weight_decay,
+                                                     model_func=model_func, init_model=init_model,
+                                                     alpha_coef=alpha_coef, rho=rho,
+                                                     sch_step=1, sch_gamma=1,
+                                                     save_period=save_period,
+                                                     suffix=suffix, trial=False,
+                                                     data_path=data_path,
+                                                     lr_decay_per_round=lr_decay_per_round)
     #
     # print('FedDisco')
     #
@@ -126,114 +126,114 @@ if __name__ == '__main__':
     #                                                   data_path=data_path,
     #                                                   lr_decay_per_round=lr_decay_per_round)
 
-    # print('FedDC')
+    print('FedDC')
     
-    # epoch = 5
-    # alpha_coef = 0.1
-    # learning_rate = 0.1
-    # print_per = epoch // 2
+    epoch = 5
+    alpha_coef = 0.1
+    learning_rate = 0.1
+    print_per = epoch // 2
     
-    # n_data_per_client = np.concatenate(data_obj.clnt_x, axis=0).shape[0] / n_client
-    # n_iter_per_epoch = np.ceil(n_data_per_client / batch_size)
-    # n_minibatch = (epoch * n_iter_per_epoch).astype(np.int64)
+    n_data_per_client = np.concatenate(data_obj.clnt_x, axis=0).shape[0] / n_client
+    n_iter_per_epoch = np.ceil(n_data_per_client / batch_size)
+    n_minibatch = (epoch * n_iter_per_epoch).astype(np.int64)
     
-    # [avg_cld_mdls, tst_cur_cld_perf] = train_FedDC(data_obj=data_obj, act_prob=act_prob,
-    #                                                n_minibatch=n_minibatch,
-    #                                                learning_rate=learning_rate, batch_size=batch_size,
-    #                                                epoch=epoch,
-    #                                                com_amount=com_amount, print_per=print_per,
-    #                                                weight_decay=weight_decay,
-    #                                                model_func=model_func, init_model=init_model,
-    #                                                alpha_coef=alpha_coef,
-    #                                                sch_step=1, sch_gamma=1, save_period=save_period,
-    #                                                suffix=suffix, trial=False,
-    #                                                data_path=data_path,
-    #                                                lr_decay_per_round=lr_decay_per_round)
+    [avg_cld_mdls, tst_cur_cld_perf] = train_FedDC(data_obj=data_obj, act_prob=act_prob,
+                                                   n_minibatch=n_minibatch,
+                                                   learning_rate=learning_rate, batch_size=batch_size,
+                                                   epoch=epoch,
+                                                   com_amount=com_amount, print_per=print_per,
+                                                   weight_decay=weight_decay,
+                                                   model_func=model_func, init_model=init_model,
+                                                   alpha_coef=alpha_coef,
+                                                   sch_step=1, sch_gamma=1, save_period=save_period,
+                                                   suffix=suffix, trial=False,
+                                                   data_path=data_path,
+                                                   lr_decay_per_round=lr_decay_per_round)
 
-    # print('FedDyn')
+    print('FedDyn')
     
-    # epoch = 5
-    # alpha_coef = 0.1
-    # learning_rate = 0.1
-    # print_per = epoch // 2
+    epoch = 5
+    alpha_coef = 0.1
+    learning_rate = 0.1
+    print_per = epoch // 2
     
-    # [avg_cld_mdls, tst_cur_cld_perf] = train_FedDyn(data_obj=data_obj, act_prob=act_prob,
-    #                                                 learning_rate=learning_rate,
-    #                                                 batch_size=batch_size, epoch=epoch,
-    #                                                 com_amount=com_amount, print_per=print_per,
-    #                                                 weight_decay=weight_decay,
-    #                                                 model_func=model_func, init_model=init_model,
-    #                                                 alpha_coef=alpha_coef,
-    #                                                 sch_step=1, sch_gamma=1, save_period=save_period,
-    #                                                 suffix=suffix, trial=False,
-    #                                                 data_path=data_path,
-    #                                                 lr_decay_per_round=lr_decay_per_round)
+    [avg_cld_mdls, tst_cur_cld_perf] = train_FedDyn(data_obj=data_obj, act_prob=act_prob,
+                                                    learning_rate=learning_rate,
+                                                    batch_size=batch_size, epoch=epoch,
+                                                    com_amount=com_amount, print_per=print_per,
+                                                    weight_decay=weight_decay,
+                                                    model_func=model_func, init_model=init_model,
+                                                    alpha_coef=alpha_coef,
+                                                    sch_step=1, sch_gamma=1, save_period=save_period,
+                                                    suffix=suffix, trial=False,
+                                                    data_path=data_path,
+                                                    lr_decay_per_round=lr_decay_per_round)
     # # # # exit(0)
     # # # # ###
-    # # print('SCAFFOLD')
+    # print('SCAFFOLD')
     
-    # epoch = 5
+    epoch = 5
     
-    # n_data_per_client = np.concatenate(data_obj.clnt_x, axis=0).shape[0] / n_client
-    # n_iter_per_epoch = np.ceil(n_data_per_client / batch_size)
+    n_data_per_client = np.concatenate(data_obj.clnt_x, axis=0).shape[0] / n_client
+    n_iter_per_epoch = np.ceil(n_data_per_client / batch_size)
     
-    # n_minibatch = (epoch * n_iter_per_epoch).astype(np.int64)
-    # learning_rate = 0.1
-    # print_per = 5
+    n_minibatch = (epoch * n_iter_per_epoch).astype(np.int64)
+    learning_rate = 0.1
+    print_per = 5
     
-    # [fed_mdls_sel, tst_perf_sel] = train_SCAFFOLD(
-    #     data_obj=data_obj, act_prob=act_prob,
-    #     learning_rate=learning_rate, batch_size=batch_size, n_minibatch=n_minibatch,
-    #     com_amount=com_amount, print_per=n_minibatch // 2, weight_decay=weight_decay,
-    #     model_func=model_func, init_model=init_model,
-    #     sch_step=1, sch_gamma=1, save_period=save_period, suffix=suffix,
-    #     trial=False, data_path=data_path, lr_decay_per_round=lr_decay_per_round)
+    [fed_mdls_sel, tst_perf_sel] = train_SCAFFOLD(
+        data_obj=data_obj, act_prob=act_prob,
+        learning_rate=learning_rate, batch_size=batch_size, n_minibatch=n_minibatch,
+        com_amount=com_amount, print_per=n_minibatch // 2, weight_decay=weight_decay,
+        model_func=model_func, init_model=init_model,
+        sch_step=1, sch_gamma=1, save_period=save_period, suffix=suffix,
+        trial=False, data_path=data_path, lr_decay_per_round=lr_decay_per_round)
     # #
     # # ####
-    # # print('FedAvg')
+    # print('FedAvg')
     
-    # epoch = 5
-    # learning_rate = 0.1
-    # print_per = 5
+    epoch = 5
+    learning_rate = 0.1
+    print_per = 5
     
-    # [fed_mdls_sel, tst_perf_sel] = train_FedAvg(
-    #     data_obj=data_obj, act_prob=act_prob,
-    #     learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
-    #     com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
-    #     model_func=model_func, init_model=init_model,
-    #     sch_step=1, sch_gamma=1, save_period=save_period, suffix=suffix,
-    #     trial=False, data_path=data_path, lr_decay_per_round=lr_decay_per_round)
+    [fed_mdls_sel, tst_perf_sel] = train_FedAvg(
+        data_obj=data_obj, act_prob=act_prob,
+        learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
+        com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
+        model_func=model_func, init_model=init_model,
+        sch_step=1, sch_gamma=1, save_period=save_period, suffix=suffix,
+        trial=False, data_path=data_path, lr_decay_per_round=lr_decay_per_round)
     # #
     # # # ####
-    # print('FedProx')
+    print('FedProx')
     
-    # epoch = 5
-    # learning_rate = 0.1
-    # print_per = 5
-    # alpha_coef = 0.1
+    epoch = 5
+    learning_rate = 0.1
+    print_per = 5
+    alpha_coef = 0.1
     
-    # [fed_mdls_sel, tst_perf_sel] = train_FedProx(
-    #     data_obj=data_obj, act_prob=act_prob,
-    #     learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
-    #     com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
-    #     model_func=model_func, init_model=init_model, sch_step=1, sch_gamma=1,
-    #     save_period=save_period, alpha_coef=alpha_coef, suffix=suffix, trial=False,
-    #     data_path=data_path, lr_decay_per_round=lr_decay_per_round)
+    [fed_mdls_sel, tst_perf_sel] = train_FedProx(
+        data_obj=data_obj, act_prob=act_prob,
+        learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
+        com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
+        model_func=model_func, init_model=init_model, sch_step=1, sch_gamma=1,
+        save_period=save_period, alpha_coef=alpha_coef, suffix=suffix, trial=False,
+        data_path=data_path, lr_decay_per_round=lr_decay_per_round)
 
-    # print('FedLESAM_D')
+    print('FedLESAM_D')
     
-    # epoch = 5
-    # learning_rate = 0.1
-    # print_per = 5
-    # alpha_coef = 0.1
+    epoch = 5
+    learning_rate = 0.1
+    print_per = 5
+    alpha_coef = 0.1
     
-    # [fed_mdls_sel, tst_perf_sel] = train_FedLESAM_D(
-    #     data_obj=data_obj, act_prob=act_prob, rho=0.1,
-    #     learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
-    #     com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
-    #     model_func=model_func, init_model=init_model, sch_step=1, sch_gamma=1,
-    #     save_period=save_period, alpha_coef=alpha_coef, suffix=suffix, trial=False,
-    #     data_path=data_path, lr_decay_per_round=lr_decay_per_round)
+    [fed_mdls_sel, tst_perf_sel] = train_FedLESAM_D(
+        data_obj=data_obj, act_prob=act_prob, rho=0.1,
+        learning_rate=learning_rate, batch_size=batch_size, epoch=epoch,
+        com_amount=com_amount, print_per=print_per, weight_decay=weight_decay,
+        model_func=model_func, init_model=init_model, sch_step=1, sch_gamma=1,
+        save_period=save_period, alpha_coef=alpha_coef, suffix=suffix, trial=False,
+        data_path=data_path, lr_decay_per_round=lr_decay_per_round)
     # #
    
 
@@ -267,25 +267,46 @@ if __name__ == '__main__':
     #
     # print("Results saved to results.txt")
 
-    # print('A_FedPD')
+    print('A_FedPD')
     
-    # epoch = 5
-    # alpha_coef = 0.1
-    # rho = 0.1
-    # learning_rate = 0.1
-    # print_per = epoch // 2
+    epoch = 5
+    alpha_coef = 0.1
+    rho = 0.1
+    learning_rate = 0.1
+    print_per = epoch // 2
     
-    # [avg_cld_mdls, tst_cur_cld_perf] = train_A_FedPD(data_obj=data_obj, act_prob=act_prob,
-    #                                                  learning_rate=learning_rate,
-    #                                                  batch_size=batch_size, epoch=epoch,
-    #                                                  com_amount=com_amount, print_per=print_per,
-    #                                                  weight_decay=weight_decay,
-    #                                                  model_func=model_func, init_model=init_model,
-    #                                                  alpha_coef=alpha_coef, rho=rho,
-    #                                                  sch_step=1, sch_gamma=1, save_period=save_period,
-    #                                                  suffix=suffix, trial=False,
-    #                                                  data_path=data_path,
-    #                                                  lr_decay_per_round=lr_decay_per_round)
+    [avg_cld_mdls, tst_cur_cld_perf] = train_A_FedPD(data_obj=data_obj, act_prob=act_prob,
+                                                     learning_rate=learning_rate,
+                                                     batch_size=batch_size, epoch=epoch,
+                                                     com_amount=com_amount, print_per=print_per,
+                                                     weight_decay=weight_decay,
+                                                     model_func=model_func, init_model=init_model,
+                                                     alpha_coef=alpha_coef, rho=rho,
+                                                     sch_step=1, sch_gamma=1, save_period=save_period,
+                                                     suffix=suffix, trial=False,
+                                                     data_path=data_path,
+                                                     lr_decay_per_round=lr_decay_per_round)
+    
+
+    print('A_FedPD_SGD')
+    
+    epoch = 5
+    alpha_coef = 0.1
+    rho = 0.1
+    learning_rate = 0.1
+    print_per = epoch // 2
+    
+    [avg_cld_mdls, tst_cur_cld_perf] = train_A_FedPD_SGD(data_obj=data_obj, act_prob=act_prob,
+                                                     learning_rate=learning_rate,
+                                                     batch_size=batch_size, epoch=epoch,
+                                                     com_amount=com_amount, print_per=print_per,
+                                                     weight_decay=weight_decay,
+                                                     model_func=model_func, init_model=init_model,
+                                                     alpha_coef=alpha_coef, rho=rho,
+                                                     sch_step=1, sch_gamma=1, save_period=save_period,
+                                                     suffix=suffix, trial=False,
+                                                     data_path=data_path,
+                                                     lr_decay_per_round=lr_decay_per_round)
 
     # print('FedCM')
     #
@@ -368,48 +389,48 @@ if __name__ == '__main__':
 
 
 
-    # print('FedGloSS')
-    # rho = 0.15              # server-side SAM radius
-    # rho_l = 0.15            # client-side SAM radius
-    # eta = 0.0               # client-side SAM step size
-    # beta = 10.0             # Lagrangian controller
-    # rho0 = 0.001            # warmup starting rho
-    # T_s = 200               # warmup length (FedGloSS uses 2000; use smaller for example)
+    print('FedGloSS')
+    rho = 0.15              # server-side SAM radius
+    rho_l = 0.15            # client-side SAM radius
+    eta = 0.0               # client-side SAM step size
+    beta = 10.0             # Lagrangian controller
+    rho0 = 0.001            # warmup starting rho
+    T_s = 200               # warmup length (FedGloSS uses 2000; use smaller for example)
 
-    # server_lr = 1.0          # server optimizer learning rate (SGD)
-    # server_momentum = 0.0
-    # epoch = 5
-    # alpha_coef = 0.1
-    # learning_rate = 0.1
-    # print_per = epoch // 2
-    # avg_models, trn_perf, tst_perf = train_FedGloss(
-    #     data_obj=data_obj,
-    #     act_prob=act_prob,
-    #     learning_rate=learning_rate,
-    #     batch_size=batch_size,
-    #     epoch=epoch,
-    #     com_amount=com_amount,
-    #     print_per=print_per,
-    #     weight_decay=weight_decay,
-    #     model_func=model_func,
-    #     init_model=init_model,
-    #     rho=rho,
-    #     rho_l=rho_l,
-    #     eta=eta,
-    #     beta=beta,
-    #     sch_step=1,
-    #     sch_gamma=1.0,
-    #     save_period=save_period,
-    #     rho0=rho0,
-    #     T_s=T_s,
-    #     server_lr=server_lr,
-    #     server_momentum=server_momentum,
-    #     suffix=suffix,
-    #     trial=False,
-    #     data_path=data_path,
-    #     rand_seed=0,
-    #     lr_decay_per_round=lr_decay_per_round,
-    # )
+    server_lr = 1.0          # server optimizer learning rate (SGD)
+    server_momentum = 0.0
+    epoch = 5
+    alpha_coef = 0.1
+    learning_rate = 0.1
+    print_per = epoch // 2
+    avg_models, trn_perf, tst_perf = train_FedGloss(
+        data_obj=data_obj,
+        act_prob=act_prob,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        epoch=epoch,
+        com_amount=com_amount,
+        print_per=print_per,
+        weight_decay=weight_decay,
+        model_func=model_func,
+        init_model=init_model,
+        rho=rho,
+        rho_l=rho_l,
+        eta=eta,
+        beta=beta,
+        sch_step=1,
+        sch_gamma=1.0,
+        save_period=save_period,
+        rho0=rho0,
+        T_s=T_s,
+        server_lr=server_lr,
+        server_momentum=server_momentum,
+        suffix=suffix,
+        trial=False,
+        data_path=data_path,
+        rand_seed=0,
+        lr_decay_per_round=lr_decay_per_round,
+    )
     print('RFL-DFDC')
 #
     epoch = 5
