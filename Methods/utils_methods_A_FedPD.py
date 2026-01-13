@@ -36,6 +36,7 @@ def train_A_FedPD_SGD(data_obj, act_prob,
 
 
     tst_cur_cld_perf = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
 
     n_par = len(get_mdl_params([model_func()])[0])
 
@@ -47,6 +48,7 @@ def train_A_FedPD_SGD(data_obj, act_prob,
 
     # writer object is for tensorboard visualization, comment out if not needed
     writer = SummaryWriter('%sRuns_A_FedPD_SGD/%s/%s' % (data_path, data_obj.name, suffix[:]))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
 
     if not trial:
         # Check if there are past saved iterates
@@ -91,6 +93,8 @@ def train_A_FedPD_SGD(data_obj, act_prob,
             cur_cld_model = model_func().to(device)
             cur_cld_model.load_state_dict(copy.deepcopy(dict(fed_cld.named_parameters())))
             cld_mdl_param = get_mdl_params([cur_cld_model], n_par)[0]
+        prev_global_param = cld_mdl_param.copy()
+        prev_global_dual = np.zeros_like(prev_global_param)
 
         for i in range(saved_itr + 1, com_amount):
             # Train if doesn't exist
@@ -165,6 +169,10 @@ def train_A_FedPD_SGD(data_obj, act_prob,
                                    'Current cloud': tst_cur_cld_perf[i][1]
                                }, i
                                )
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       cld_mdl_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Current cloud', residual_metrics[i], i)
+            prev_global_param = cld_mdl_param.copy()
 
             if (not trial) and ((i + 1) % save_period == 0):
                 torch.save(cur_cld_model.state_dict(), '%sModel/%s/%s/cld_avg_%dcom.pt'
@@ -192,6 +200,10 @@ def train_A_FedPD_SGD(data_obj, act_prob,
 
             if ((i + 1) % save_period == 0):
                 avg_cld_mdls[i // save_period] = cur_cld_model
+
+    save_last_window_stats(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], output_dir=log_dir)
+    register_method_performance(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], residual_metrics)
+
 
     return avg_cld_mdls,  tst_cur_cld_perf
 
@@ -225,6 +237,7 @@ def train_A_FedPD(data_obj, act_prob,
 
 
     tst_cur_cld_perf = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
 
     n_par = len(get_mdl_params([model_func()])[0])
 
@@ -236,6 +249,7 @@ def train_A_FedPD(data_obj, act_prob,
 
     # writer object is for tensorboard visualization, comment out if not needed
     writer = SummaryWriter('%sRuns_A_FedPD/%s/%s' % (data_path, data_obj.name, suffix[:]))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
 
     if not trial:
         # Check if there are past saved iterates
@@ -280,7 +294,8 @@ def train_A_FedPD(data_obj, act_prob,
             cur_cld_model = model_func().to(device)
             cur_cld_model.load_state_dict(copy.deepcopy(dict(fed_cld.named_parameters())))
             cld_mdl_param = get_mdl_params([cur_cld_model], n_par)[0]
-
+        prev_global_param = cld_mdl_param.copy()
+        prev_global_dual = np.zeros_like(prev_global_param)
         for i in range(saved_itr + 1, com_amount):
             # Train if doesn't exist
             ### Fix randomness
@@ -354,6 +369,15 @@ def train_A_FedPD(data_obj, act_prob,
                                    'Current cloud': tst_cur_cld_perf[i][1]
                                }, i
                                )
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       cld_mdl_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Current cloud', residual_metrics[i], i)
+            prev_global_param = cld_mdl_param.copy()
+
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       cld_mdl_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Current cloud', residual_metrics[i], i)
+            prev_global_param = cld_mdl_param.copy()
 
             if (not trial) and ((i + 1) % save_period == 0):
                 torch.save(cur_cld_model.state_dict(), '%sModel/%s/%s/cld_avg_%dcom.pt'
@@ -381,5 +405,154 @@ def train_A_FedPD(data_obj, act_prob,
 
             if ((i + 1) % save_period == 0):
                 avg_cld_mdls[i // save_period] = cur_cld_model
+        save_last_window_stats(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], output_dir=log_dir)
+        register_method_performance(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], residual_metrics)
 
     return avg_cld_mdls,  tst_cur_cld_perf
+
+def train_model_Fedspeed(model, model_func, alpha_coef, avg_mdl_param, hist_params_diff, trn_x, trn_y,
+                         learning_rate, rho, batch_size, epoch, print_per,
+                         weight_decay, dataset_name, sch_step, sch_gamma):
+    n_trn = trn_x.shape[0]
+
+    trn_gen = data.DataLoader(Dataset(trn_x, trn_y, train=True, dataset_name=dataset_name), batch_size=batch_size,
+                              shuffle=True)
+    loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay + alpha_coef)
+    rho_optimizer = ESAM(model.parameters(), optimizer, rho=rho)
+
+    model.train()
+    model = model.to(device)
+
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=sch_step, gamma=sch_gamma)
+    model.train()
+
+    n_par = get_mdl_params([model_func()]).shape[1]
+
+    for e in range(epoch):
+        # Training
+        epoch_loss = 0
+        trn_gen_iter = trn_gen.__iter__()
+        for i in range(int(np.ceil(n_trn / batch_size))):
+            batch_x, batch_y = trn_gen_iter.__next__()
+            batch_x = batch_x.to(device)
+            batch_y = batch_y.to(device).reshape(-1).long()
+            rho_optimizer.paras = [batch_x, batch_y, loss_fn, model]
+            rho_optimizer.step()
+
+            # Get linear penalty on the current parameter estimates
+            local_par_list = None
+            for param in model.parameters():
+                if not isinstance(local_par_list, torch.Tensor):
+                    # Initially nothing to concatenate
+                    local_par_list = param.reshape(-1)
+                else:
+                    local_par_list = torch.cat((local_par_list, param.reshape(-1)), 0)
+
+            loss_correct = alpha_coef * torch.sum(local_par_list * (-avg_mdl_param + hist_params_diff))
+
+            loss_correct.backward()
+
+        
+            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(),
+                                           max_norm=max_norm)  # Clip gradients to prevent exploding
+            optimizer.step()
+
+        if (e + 1) % print_per == 0:
+            epoch_loss /= n_trn
+            if weight_decay != None:
+                # Add L2 loss to complete f_i
+                params = get_mdl_params([model], n_par)
+                epoch_loss += (alpha_coef + weight_decay) / 2 * np.sum(params * params)
+
+            print("Epoch %3d, Training Loss: %.4f, LR: %.5f"
+                  % (e + 1, epoch_loss, scheduler.get_lr()[0]))
+
+            model.train()
+        scheduler.step()
+
+    # Freeze model
+    for params in model.parameters():
+        params.requires_grad = False
+    model.eval()
+
+    return model
+
+
+
+def train_model_FedDyn(model, model_func, alpha_coef, avg_mdl_param, hist_params_diff, trn_x, trn_y,
+                       learning_rate, batch_size, epoch, print_per,
+                       weight_decay, dataset_name, sch_step, sch_gamma):
+    n_trn = trn_x.shape[0]
+
+    trn_gen = data.DataLoader(Dataset(trn_x, trn_y, train=True, dataset_name=dataset_name), batch_size=batch_size,
+                              shuffle=True)
+    loss_fn = torch.nn.CrossEntropyLoss(reduction='sum')
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=alpha_coef + weight_decay)
+
+    model.train();
+    model = model.to(device)
+
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=sch_step, gamma=sch_gamma)
+    model.train()
+
+    n_par = get_mdl_params([model_func()]).shape[1]
+
+    for e in range(epoch):
+        # Training
+        epoch_loss = 0
+        trn_gen_iter = trn_gen.__iter__()
+        for i in range(int(np.ceil(n_trn / batch_size))):
+            batch_x, batch_y = trn_gen_iter.__next__()
+            batch_x = batch_x.to(device)
+            batch_y = batch_y.to(device)
+
+            y_pred = model(batch_x)
+
+            ## Get f_i estimate
+            loss_f_i = loss_fn(y_pred, batch_y.reshape(-1).long())
+
+            loss_f_i = loss_f_i / list(batch_y.size())[0]
+
+            # Get linear penalty on the current parameter estimates
+            local_par_list = None
+            for param in model.parameters():
+                if not isinstance(local_par_list, torch.Tensor):
+                    # Initially nothing to concatenate
+                    local_par_list = param.reshape(-1)
+                else:
+                    local_par_list = torch.cat((local_par_list, param.reshape(-1)), 0)
+
+            loss_algo = alpha_coef * torch.sum(local_par_list * (-avg_mdl_param + hist_params_diff))
+
+            loss = loss_f_i + loss_algo
+
+            ###
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(),
+                                           max_norm=max_norm)  # Clip gradients to prevent exploding
+            optimizer.step()
+            epoch_loss += loss.item() * list(batch_y.size())[0]
+
+        if (e + 1) % print_per == 0:
+            epoch_loss /= n_trn
+            if weight_decay != None:
+                # Add L2 loss to complete f_i
+                params = get_mdl_params([model], n_par)
+                epoch_loss += (alpha_coef + weight_decay) / 2 * np.sum(params * params)
+
+            print("Epoch %3d, Training Loss: %.4f, LR: %.5f"
+                  % (e + 1, epoch_loss, scheduler.get_lr()[0]))
+
+            model.train()
+        scheduler.step()
+
+    # Freeze model
+    for params in model.parameters():
+        params.requires_grad = False
+    model.eval()
+
+    return model

@@ -4,6 +4,9 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from sympy.physics.units.definitions.unit_definitions import gauss
 from torchvision.transforms.v2.functional import gaussian_blur
 
@@ -29,6 +32,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 import time
 
 max_norm = 10
+METHOD_PERFORMANCE_REGISTRY = defaultdict(dict)
+RESIDUAL_METRIC_NAMES = ['primal_residual', 'dual_residual', 'global_dual_residual', 'primal_dual_ratio']
 
 
 class DistillKL(nn.Module):
@@ -164,6 +169,141 @@ def param_to_vector(model):
     for param in model.parameters():
         vec.append(param.reshape(-1))
     return torch.cat(vec)
+
+
+def _to_numpy(array_like):
+    """Convert tensors or lists to flattened numpy arrays."""
+    if array_like is None:
+        return None
+    if isinstance(array_like, np.ndarray):
+        return array_like
+    if torch.is_tensor(array_like):
+        return array_like.detach().cpu().numpy()
+    return np.asarray(array_like)
+
+
+def compute_last_window_stats(series, window=100):
+    """Return mean/variance of the last `window` entries in `series`."""
+    arr = _to_numpy(series).astype(np.float64)
+    if arr.size == 0:
+        return {'mean': np.nan, 'std': np.nan}
+    last = arr[-window:] if arr.shape[0] >= window else arr
+    return {'mean': float(np.mean(last)), 'std': float(np.std(last))}
+
+
+def save_last_window_stats(method_name, loss_series, acc_series, window=100, output_dir=None):
+    """Persist last-window statistics for loss & accuracy into a txt file."""
+    output_dir = output_dir or 'Logs'
+    os.makedirs(output_dir, exist_ok=True)
+    loss_stats = compute_last_window_stats(loss_series, window=window)
+    acc_stats = compute_last_window_stats(acc_series, window=window)
+    file_path = os.path.join(output_dir, f'{method_name}_last_{window}_rounds.txt')
+    with open(file_path, 'w') as handle:
+        handle.write(f'Method: {method_name}\n')
+        handle.write(f'Window: {window}\n')
+        loss_mean = loss_stats["mean"]
+        loss_std = loss_stats["std"]
+        acc_mean = acc_stats["mean"] * 100.0
+        acc_std = acc_stats["std"] * 100.0
+        handle.write('Loss\n')
+        handle.write(f'  {loss_mean:.2f} ± {loss_std:.2f}\n')
+        handle.write('Accuracy (%)\n')
+        handle.write(f'  {acc_mean:.2f} ± {acc_std:.2f}\n')
+    return file_path
+
+
+def register_method_metric(method_name, metric_name, values):
+    """Store a metric series for later visualization."""
+    if values is None:
+        return
+    series = _to_numpy(values).astype(np.float64)
+    METHOD_PERFORMANCE_REGISTRY[method_name][metric_name] = series
+
+
+def register_method_performance(method_name, loss_series, acc_series, residual_metrics=None):
+    """Register canonical metrics (loss/acc + optional residuals) for plotting."""
+    register_method_metric(method_name, 'loss', loss_series)
+    register_method_metric(method_name, 'acc', acc_series)
+    if residual_metrics is not None:
+        for idx, name in enumerate(RESIDUAL_METRIC_NAMES):
+            register_method_metric(method_name, name, residual_metrics[:, idx])
+
+
+def plot_method_metric(method_names, metric_name, save_path=None):
+    """
+    Draw line chart for the requested metric across different methods.
+    metric_name should be one of: loss, acc, primal_residual, dual_residual, global_dual_residual.
+    """
+    plt.figure(figsize=(8, 5))
+    plotted = False
+    for name in method_names:
+        metrics = METHOD_PERFORMANCE_REGISTRY.get(name, {})
+        series = metrics.get(metric_name, None)
+        if series is None:
+            continue
+        plt.plot(series, label=name)
+        plotted = True
+    if not plotted:
+        plt.close()
+        raise ValueError(f'No data registered for metric `{metric_name}` with methods {method_names}.')
+    plt.xlabel('Communication Round')
+    plt.ylabel(metric_name.replace('_', ' ').title())
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.4)
+    os.makedirs('Plots', exist_ok=True)
+    if save_path is None:
+        timestamp = int(time.time())
+        save_path = os.path.join('Plots', f'{metric_name}_{timestamp}.png')
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    return save_path
+
+
+def compute_primal_residual(selected_params, global_params):
+    if selected_params.size == 0:
+        return 0.0
+    diffs = selected_params - global_params.reshape(1, -1)
+    norms = np.linalg.norm(diffs, axis=1)
+    return float(np.mean(norms))
+
+
+def update_residual_metrics(residual_buffer, round_idx, clnt_params_list, selected_clients,
+                            current_global_params, previous_global_params, prev_global_dual):
+    """
+    Populate residual metrics for current round and return the new global dual update.
+    residual_buffer[:, 0] => primal residual
+    residual_buffer[:, 1] => dual residual
+    residual_buffer[:, 2] => global dual residual
+    """
+    clnt_params = _to_numpy(clnt_params_list)
+    selected_clients = np.asarray(selected_clients, dtype=np.int64)
+    current_global_params = _to_numpy(current_global_params)
+    previous_global_params = _to_numpy(previous_global_params)
+    prev_global_dual = _to_numpy(prev_global_dual)
+    if len(selected_clients) > 0:
+        selected_params = clnt_params[selected_clients]
+    else:
+        selected_params = np.zeros((0, current_global_params.shape[0]))
+    primal_residual = compute_primal_residual(selected_params, current_global_params)
+    dual_diff = current_global_params - previous_global_params
+    dual_residual = float(np.linalg.norm(dual_diff))
+    global_dual_residual = float(np.linalg.norm(dual_diff - prev_global_dual))
+    ratio = float(primal_residual / (dual_residual + 1e-12))
+    residual_buffer[round_idx] = [primal_residual, dual_residual, global_dual_residual, ratio]
+    return dual_diff
+
+
+def log_residual_scalars(writer, label, values, round_idx):
+    if writer is None:
+        return
+    metric_tags = [
+        ('Residual/Primal', values[0]),
+        ('Residual/Dual', values[1]),
+        ('Residual/GlobalDual', values[2]),
+        ('Residual/PrimalToDual', values[3]),
+    ]
+    for tag, val in metric_tags:
+        writer.add_scalars(tag, {label: val}, round_idx)
 
 
 def get_distribution_difference(client_cls_counts, participation_clients, metric, hypo_distribution):
@@ -328,11 +468,3 @@ def topk_sparsify(tensor, k_ratio=0.01):
     mask = mask.view(tensor.shape)
 
     return tensor * mask
-
-
-
-
-
-
-
-

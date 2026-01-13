@@ -36,6 +36,7 @@ def train_RFL_DFDC(data_obj, act_prob,
 
     trn_cur_cld_perf = np.zeros((com_amount, 2))
     tst_cur_cld_perf = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
 
     n_par = len(get_mdl_params([model_func()])[0])
 
@@ -47,7 +48,8 @@ def train_RFL_DFDC(data_obj, act_prob,
     saved_itr = -1
 
     # writer object is for tensorboard visualization, comment out if not needed
-    writer = SummaryWriter('%sRuns_FedDG/%s/%s' % (data_path, data_obj.name, suffix[:26]))
+    writer = SummaryWriter('%sRuns_RFL_DFDC/%s/%s' % (data_path, data_obj.name, suffix[:26]))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
 
     if not trial:
         # Check if there are past saved iterates
@@ -94,6 +96,8 @@ def train_RFL_DFDC(data_obj, act_prob,
             cur_cld_model = model_func().to(device)
             cur_cld_model.load_state_dict(copy.deepcopy(dict(fed_cld.named_parameters())))
             cld_mdl_param = get_mdl_params([cur_cld_model], n_par)[0]
+        prev_global_param = cld_mdl_param.copy()
+        prev_global_dual = np.zeros_like(prev_global_param)
 
         for i in range(saved_itr + 1, com_amount):
             # Train if doesn't exist    
@@ -196,31 +200,6 @@ def train_RFL_DFDC(data_obj, act_prob,
 
             cur_cld_model = set_client_from_params(model_func().to(device), cld_mdl_param)
 
-            # loss_tst, acc_tst = get_acc_loss(cent_x, cent_y,
-            #                                  cur_cld_model, data_obj.dataset, 0)
-            # print("**** Cur cld Communication %3d, Cent Accuracy: %.4f, Loss: %.4f"
-            #       % (i + 1, acc_tst, loss_tst))
-            # trn_cur_cld_perf[i] = [loss_tst, acc_tst]
-
-            # writer.add_scalars('Loss/train',
-            #                    {
-            #                        'Current cloud': trn_cur_cld_perf[i][0]
-            #                    }, i
-            #                    )
-
-            # writer.add_scalars('Accuracy/train',
-            #                    {
-            #                        'Current cloud': trn_cur_cld_perf[i][1]
-            #                    }, i
-            #                    )
-
-            # writer.add_scalars('Loss/train_wd',
-            #                    {
-            #                        'Current cloud':
-            #                            get_acc_loss(cent_x, cent_y, cur_cld_model, data_obj.dataset, weight_decay)[0]
-            #                    }, i
-            #                    )
-
             #####
 
             loss_tst, acc_tst = get_acc_loss(data_obj.tst_x, data_obj.tst_y,
@@ -240,6 +219,10 @@ def train_RFL_DFDC(data_obj, act_prob,
                                    'Current cloud': tst_cur_cld_perf[i][1]
                                }, i
                                )
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       cld_mdl_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Current cloud', residual_metrics[i], i)
+            prev_global_param = cld_mdl_param.copy()
 
             if (not trial) and ((i + 1) % save_period == 0):
                 torch.save(cur_cld_model.state_dict(), '%sModel/%s/%s/cld_avg_%dcom.pt'
@@ -271,6 +254,9 @@ def train_RFL_DFDC(data_obj, act_prob,
 
             if ((i + 1) % save_period == 0):
                 avg_cld_mdls[i // save_period] = cur_cld_model
+
+    save_last_window_stats(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], output_dir=log_dir)
+    register_method_performance(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], residual_metrics)
 
     return avg_cld_mdls, tst_cur_cld_perf
 
