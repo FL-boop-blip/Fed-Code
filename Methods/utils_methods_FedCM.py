@@ -34,6 +34,7 @@ def train_FedCM(data_obj, act_prob,
 
 
     tst_cur_cld_perf = np.zeros((com_amount, 2))
+    residual_metrics = np.zeros((com_amount, 4))
 
     n_par = len(get_mdl_params([model_func()])[0])
 
@@ -45,6 +46,7 @@ def train_FedCM(data_obj, act_prob,
 
     # writer object is for tensorboard visualization, comment out if not needed
     writer = SummaryWriter('%sRuns_FedCM/%s/%s' % (data_path, data_obj.name, suffix[:]))
+    log_dir = os.path.join(writer.logdir, 'Logs') if hasattr(writer, 'logdir') and writer.logdir else 'Logs'
 
     if not trial:
         # Check if there are past saved iterates
@@ -89,6 +91,8 @@ def train_FedCM(data_obj, act_prob,
             cur_cld_model = model_func().to(device)
             cur_cld_model.load_state_dict(copy.deepcopy(dict(fed_cld.named_parameters())))
             cld_mdl_param = get_mdl_params([cur_cld_model], n_par)[0]
+        prev_global_param = cld_mdl_param.copy()
+        prev_global_dual = np.zeros_like(prev_global_param)
 
         for i in range(saved_itr + 1, com_amount):
             # Train if doesn't exist
@@ -165,6 +169,11 @@ def train_FedCM(data_obj, act_prob,
                                }, i
                                )
 
+            prev_global_dual = update_residual_metrics(residual_metrics, i, clnt_params_list, selected_clnts,
+                                                       cld_mdl_param, prev_global_param, prev_global_dual)
+            log_residual_scalars(writer, 'Current cloud', residual_metrics[i], i)
+            prev_global_param = cld_mdl_param.copy()
+
             if (not trial) and ((i + 1) % save_period == 0):
                 torch.save(cur_cld_model.state_dict(), '%sModel/%s/%s/cld_avg_%dcom.pt'
                            % (data_path, data_obj.name, suffix, (i + 1)))
@@ -188,6 +197,9 @@ def train_FedCM(data_obj, act_prob,
 
             if ((i + 1) % save_period == 0):
                 avg_cld_mdls[i // save_period] = cur_cld_model
+    save_last_window_stats(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], output_dir=log_dir)
+    register_method_performance(suffix, tst_cur_cld_perf[:, 0], tst_cur_cld_perf[:, 1], residual_metrics)
+
     return avg_cld_mdls,  tst_cur_cld_perf
 
 
